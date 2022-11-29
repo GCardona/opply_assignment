@@ -1,68 +1,126 @@
-# Django base
+# Opply Assignment by GCardona.
 
-basic [Django](https://www.djangoproject.com/) project image to easy and quickly run up, using [Docker](https://www.docker.com/), [PostgreSQL](https://www.postgresql.org/), [Bootstrap 4](https://v4-alpha.getbootstrap.com/) and [JQuery](https://jquery.com/).
+This is my take on resolving the Backend Assignment for Opply.
 
-## Run the project
+You can test this by just by navigating to the root and:
 
-To run the project in a local enviroment, follow next steps:
+```bash
+docker-compose up -d
+```
 
-1. **Install Docker**.
+Also feel free to run tests by:
+```bash
+docker-compose run web python manage.py test --noinput
+```
+### Create a User
+```bash
+docker-compose exec -it web bash
+# Inside the docker container now:
+$ ./manage.py createsuperuser
+[...] # Follow the prompts.
+$ exit
+```
 
-Download Docker from the [offical website](https://docs.docker.com/engine/installation/) and install it.
+## Playing with the API.
 
-2. **Clone the project**.
+I attach here some examples to be done with `curl` to play with the functionality. Otherwise, I strongly recommend trying out [Insomnia](https://insomnia.rest), for which I attach the file `insomnia_opply.json`. Import it into Insomnia and you have everything there to test :)
+### Get API Token for the created user `GET /token/`:
+```bash
+# Outside the container.
+curl --request GET \
+  --url http://localhost:8000/token/ \
+  -u "{username}:{password}"
+# Answer:
+{"token":"033e4e9652c885c961fc1143eac575794c1b76c8"}
+```
+Note: We can save this token and use it for the rest of the API calls:
 
-Clone the project code locally using [Git](https://git-scm.com/):
+### Create some Products `POST /products/`
+```bash
+curl --request POST \
+  --url http://localhost:8000/products/ \
+  --header 'Content-Type: application/json' \
+  --header 'Authorization: Token 033e4e9652c885c961fc1143eac575794c1b76c8'
+  --data '{
+	"name": "Product 1",
+	"price": "11.11",
+	"quantity_in_stock": 10
+  }'
+  
+curl --request POST \
+  --url http://localhost:8000/products/ \
+  --header 'Content-Type: application/json' \
+  --header 'Authorization: Token 033e4e9652c885c961fc1143eac575794c1b76c8'
+  --data '{
+	"name": "Product 2",
+	"price": "22.22",
+	"quantity_in_stock": 20
+  }'
+```
 
-    git clone git@github.com:augustakingfoundation/django_base.git
+### Get the Products List `GET /products/`
+```bash
+curl --request GET \
+  --url http://localhost:8000/products/ \
+  --header 'Authorization: Token 033e4e9652c885c961fc1143eac575794c1b76c8'
+```
 
-3. **Build the Docker image**
+### Add a Product to Order `POST /products/{product_id}/add_to_order/`
+```bash
+curl --request POST \
+  --url http://localhost:8000/products/1/add_to_order/ \
+  --header 'Authorization: Token 033e4e9652c885c961fc1143eac575794c1b76c8'
+```
+This will add a quantity of 1 Product to a current Order that you have active (only one at a time). If there is no active order, one will be created.
 
-Make sure that Docker is running. Move to the root project folder and run the following command:
+### Remove Product from Order `POST /products/{product_id}/remove_from_order/`
+```bash
+curl --request POST \
+  --url http://localhost:8000/products/1/remove_from_order/ \
+  --header 'Authorization: Token 033e4e9652c885c961fc1143eac575794c1b76c8'
+```
+This will remove the Product {product_id} from the Order in a quantity of 1.
 
-    docker-compose build
+### Submit my Order `POST /orders/{order_id}/submit/`
+This will submit the current active Order with the products on it, and make the proper Stock changes in the products themselves. I only update the stock once I submit the order, but if there is no stock it won't let you add the product on the previous step anyway. So stock is checked both when adding the Product to the Order, and when submitting, but changes to the Product Stock are only made persistent once we Submit the Order.
+```bash
+curl --request POST \
+  --url http://localhost:8000/orders/4/submit/ \
+  --header 'Authorization: Token 033e4e9652c885c961fc1143eac575794c1b76c8'
+```
+### Get all my Orders `GET /orders/`
+```bash
+curl --request GET \
+  --url http://localhost:8000/orders/ \
+  --header 'Authorization: Token 033e4e9652c885c961fc1143eac575794c1b76c8'
+```
+### Get Current Active Order `GET /orders/current/`
+```bash
+curl --request GET \
+  --url http://localhost:8000/orders/current/ \
+  --header 'Authorization: Token 033e4e9652c885c961fc1143eac575794c1b76c8'
+```
 
-4. **Run the project**
+# Deployment Notes
+As you can see the App is packaged into a Docker container. Some changes I would need to do to make it deployable in production:
+- Add env Variables to be fed through the docker env into the settings. These could be anything that is external to the application such as DB host, password, username, db_name, environment (prod, dev, test, stage, etc).
+- These variables could come from a `prod.env` or be fed into the container through a bash script gathering output from a IAC tool such as Terraform.
+- I would then have a pipeline (Github Actions, Gitlab Pipelines, etc) that can check for things like:
+  - PyLint
+  - PEP8 (Flake8)
+  - isort (imports)
+  - black (formatting)
+  - mypy (static type checking if needed)
+  - Test execution
+- Once all the checks are done, I would:
+  - If trigger is `main`/`master` branch:
+    - Build a new image with the commit snapshot of the code and push it to the image repository.
+    - Trigger any Orchestration software to update the service with the new tag created for Prod environment.
+  - If trigger is any other branch:
+    - Same as above, but just trigger Orchestration software to update the Staging environment.
 
-Run the following command to run the project:
+For all of this I would set up in AWS an RDS (can be set up by Terraform and given the proper outputs to feed the env variables of the containers) and a EKS cluster on top of an EC2 AutoScale group of instances.
 
-    docker-compose up
+I would also need a domain name from Route53 with a Public IP for outside access, and security Groups for the different services (Web, DB, Workers, Redis etc) to have connectivity with each other.
 
-Now you can navigate to *localhost:8000* in your browser and you will see a Django project runing.
-
-## Architecture
-
-Python 3.6.0
-
-Django 2.0
-
-PostgreSQL 10.1
-
-Bootstrap 4
-
-Jquery 3.2.1
-
-
-## keep in mind
-
-1. If you will to create your own git repository, move to project root and remove the *.git/* folder configuration running the following comand:
-
-    rm -rf .git/
-
-2. It's amazing if you want to contribute. Please create your pull requests from your own branch to *development* branch.
-
-3. Change the name of the root folder from *django_base* to your project name, and go to *docker-compose.yml* and edit image names from *djangobase* to your project name.
-
-4. If you have any suggestion or you want to contribute, I want to recommend you register it on [utopian.io](https://utopian.io/).
-
-***
-
-**How was this repository built?**
-
-- [Step by step guide to create a django_base project repository](https://steemit.com/utopian-io/@coffeesource.net/step-by-step-guide-to-create-a-djangobase-project-repository)
-- [Pasos para crear el repositorio django_base](https://steemit.com/utopian-io/@kit.andres/pasos-para-crear-el-repositorio-del-proyecto-djangobase)
-
-**How setup a new Django project?**
-
-
-- [Cómo iniciar mi proyecto Django](https://steemit.com/utopian-io/@kit.andres/configuracion-inicial-de-mi-propio-proyecto-django-usando-el-repositorio-djangobase).
+With this we can nicely Scale through EC2 Resources given a threshold of usage, and EKS can take advantage of these resources to scale up and down any services that require it. We can leverage Kubernetes to apply any Deployment strategy that we want to ensure no downtime (Blue/Green, Canary Deployment, etc.)

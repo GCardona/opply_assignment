@@ -1,8 +1,12 @@
 # Framework
-Django==2.0.5
+Django==4.1
+djangorestframework==3.14.0
 
 # Lib
-psycopg2-binary==2.7.4
+psycopg2-binary==2.9.5
 
 # Apps
-django-extensions==2.0.7
+django-extensions
+
+# Test
+factory_boy
